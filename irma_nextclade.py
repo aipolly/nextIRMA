@@ -50,7 +50,7 @@ MODULE_SEGMENT_MAP: dict[str, dict[int, str]] = {
     "FLU_AD": {},
 }
 
-SUPPORTED_MODULES = {"FLU", "RSV", "CoV"}
+SUPPORTED_MODULES = {"FLU", "RSV", "CoV", "HMPV","HPIV"}
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -215,7 +215,7 @@ def step_rename_fasta(
     For multi-segment modules (e.g. FLU), files are numbered (sample_1.fa)
     and mapped via MODULE_SEGMENT_MAP.
     For single-segment modules (e.g. RSV, empty segment map), pick
-    {sample}.pad.fa only.
+    {sample}.pad.fa and {sample}.fa
 
     Returns path to the renamed FASTA, or None on failure.
     """
@@ -243,12 +243,16 @@ def step_rename_fasta(
                 record.description = ""
                 renamed_records.append(record)
     else:
-        # Single-segment: pick {sample}.pad.fa
         pad_fa = consensus_dir / f"{sample}.pad.fa"
-        if not pad_fa.is_file():
-            logger.error(f"Single-segment pad file not found: {pad_fa}")
+        fa = consensus_dir / f"{sample}.fa"
+
+        use_fa = pad_fa if pad_fa.is_file() else fa
+        if not use_fa.is_file():
+            logger.error(f"No consensus FASTA found for {sample} in {consensus_dir}")
             return None
-        for record in SeqIO.parse(str(pad_fa), "fasta"):
+        else:
+            logger.info(f"Using consensus FASTA for {sample}: {use_fa.name}")
+        for record in SeqIO.parse(str(use_fa), "fasta"):
             record.id = f"{sample}_{module}"
             record.name = f"{sample}_{module}"
             record.description = ""
