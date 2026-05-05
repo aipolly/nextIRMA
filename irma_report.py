@@ -40,8 +40,8 @@ TEXT = {
         "基于参考序列的迭代组装，生成各基因组片段的一致性序列。",
     ),
     "step_align": (
-        "Alignment of clean reads to the reference sequences from Nextclade datasets to calculate alignment rate and genome coverage.",
-        "将过滤后的 clean reads 比对到 Nextclade 数据集的标准参考序列，计算比对率和基因组覆盖度。",
+        "Alignment of clean reads to the reference sequences from IRMA assembly results to calculate alignment rate and genome coverage.",
+        "将过滤后的 clean reads 比对到 IRMA 组装结果的参考序列，计算比对率和基因组覆盖度。",
     ),
     "step_sort": (
         "Automatic dataset assignment for each segment based on sequence similarity.",
@@ -78,8 +78,8 @@ TEXT = {
         "fastp 通过双端 reads 重叠分析估算的插入片段峰值。",
     ),
     "qc_align_rate": (
-        "Percentage of clean reads successfully aligned to the reference sequences from Nextclade datasets (minimap2 + samtools flagstat, QC-passed reads mapped %). Reflects how well the data matches the standard reference genomes.",
-        "成功比对到 Nextclade 数据集标准参考序列的 clean reads 百分比（minimap2 + samtools flagstat，QC-passed reads mapped %）。反映数据与标准参考基因组的匹配程度。",
+        "Percentage of clean reads successfully aligned to the reference sequences from IRMA assembly results (minimap2 + samtools flagstat, QC-passed reads mapped %). Reflects how well the data matches the assembled consensus sequences.",
+        "成功比对到 IRMA 组装结果参考序列的 clean reads 百分比（minimap2 + samtools flagstat，QC-passed reads mapped %）。反映数据与组装一致性序列的匹配程度。",
     ),
     "qc_coverage": (
         "Genome coverage calculated as <code>sum(covbases) / sum(endpos)</code> from <code>samtools coverage -Q 20</code>. Represents the proportion of the reference genome covered by at least one base with MAPQ &ge;20.",

@@ -34,8 +34,8 @@ from Bio.SeqRecord import SeqRecord
 # Empty dict means single-segment genome, segment name = module name
 MODULE_SEGMENT_MAP: dict[str, dict[int, str]] = {
     "FLU": {
-        1: "PB1",
-        2: "PB2",
+        1: "PB2",
+        2: "PB1",
         3: "PA",
         4: "HA",
         5: "NP",
@@ -302,8 +302,7 @@ def collect_coverage_plots(sample: str, irma_dir: Path, plot_dir: Path) -> None:
 # ---------------------------------------------------------------------------
 # Step 7: Alignment rate (minimap2 + samtools flagstat)
 #
-# Uses reference.fasta from nextclade datasets (NOT IRMA consensus).
-# Must run after nextclade run to know which datasets were assigned.
+# Uses consensus sequences from IRMA output (amended_consensus/*.fa).
 # ---------------------------------------------------------------------------
 
 
@@ -312,52 +311,42 @@ def step_alignment_rate(
     run_dir: Path,
     c1: Path,
     c2: Path,
-    database_path: Path,
-    datasets_used: list[str],
+    irma_dir: Path,
 ) -> Optional[dict]:
     """
-    Collect reference.fasta from each nextclade dataset used by this sample,
-    merge into one reference FASTA, align clean reads with minimap2,
+    Collect all FASTA files from IRMA output directory,
+    merge into one reference FASTA sorted by sequence length,
+    align clean reads with minimap2,
     and compute alignment rate using samtools flagstat.
-
-    This step must run AFTER nextclade run, because we need to know which
-    datasets were assigned to this sample's segments.
 
     Args:
         sample: Sample name.
         run_dir: Per-sample working directory (outdir/run_{sample}/).
         c1, c2: Clean reads from fastp.
-        database_path: Root path of nextclade datasets.
-        datasets_used: List of dataset names assigned by nextclade sort
-                       (e.g. ["nextstrain/flu/h3n2/ha/EPI1857216", ...]).
+        irma_dir: IRMA output directory (outdir/run_{sample}/{sample}/).
 
     Returns dict with alignment stats, or None on failure.
     """
     align_dir = run_dir / "alignment"
     align_dir.mkdir(parents=True, exist_ok=True)
 
-    # Collect reference.fasta from each nextclade dataset
+    # Collect all .fasta files directly under irma_dir (not recursive)
     ref_fa = align_dir / "reference.fasta"
     records: list[SeqRecord] = []
-    seen_ids: set[str] = set()
 
-    for dataset_name in datasets_used:
-        dataset_ref = database_path / dataset_name / "reference.fasta"
-        if not dataset_ref.is_file():
-            logger.warning(f"reference.fasta not found for dataset {dataset_name}")
-            continue
-        for rec in SeqIO.parse(str(dataset_ref), "fasta"):
-            # Deduplicate by seq ID (same dataset might appear for multiple segments)
-            if rec.id not in seen_ids:
-                records.append(rec)
-                seen_ids.add(rec.id)
+    for fa_path in irma_dir.glob("*.fasta"):
+        for rec in SeqIO.parse(str(fa_path), "fasta"):
+            records.append(rec)
 
     if not records:
-        logger.error(f"No reference sequences collected from datasets for {sample}")
+        logger.error(f"No reference sequences found in {irma_dir} for {sample}")
         return None
 
+    # Sort by sequence length (descending)
+    records.sort(key=lambda r: len(str(r.seq)), reverse=True)
+
     SeqIO.write(records, str(ref_fa), "fasta")
-    logger.info(f"Reference from datasets: {ref_fa} ({len(records)} sequences)")
+    logger.info(f"Reference from IRMA: {ref_fa} ({len(records)} sequences)")
 
     # minimap2 index
     ref_mmi = align_dir / "reference.mmi"
@@ -840,21 +829,15 @@ def process_sample(
         sample, run_dir, renamed_fasta, seq_to_dataset, database_path
     )
 
-    # Step 7: Alignment rate — uses reference.fasta from nextclade datasets
-    datasets_used = sorted(set(r["dataset"] for r in nextclade_results if r.get("dataset")))
-    if datasets_used:
-        logger.info(f"[Step 7/7] Alignment rate for {sample} (using {len(datasets_used)} dataset references)")
-        align_result = step_alignment_rate(
-            sample, run_dir, c1, c2, database_path, datasets_used
-        )
-        if align_result is not None:
-            qc_data["Alignment_Rate"] = align_result["Alignment_Rate"]
-            qc_data["Coverage"] = align_result["Coverage"]
-        else:
-            qc_data["Alignment_Rate"] = 0
-            qc_data["Coverage"] = 0
+    # Step 7: Alignment rate — uses consensus sequences from IRMA results
+    logger.info(f"[Step 7/7] Alignment rate for {sample}")
+    align_result = step_alignment_rate(
+        sample, run_dir, c1, c2, irma_dir
+    )
+    if align_result is not None:
+        qc_data["Alignment_Rate"] = align_result["Alignment_Rate"]
+        qc_data["Coverage"] = align_result["Coverage"]
     else:
-        logger.warning(f"No datasets available for alignment rate calculation for {sample}")
         qc_data["Alignment_Rate"] = 0
         qc_data["Coverage"] = 0
 
