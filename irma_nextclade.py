@@ -440,17 +440,56 @@ def parse_sort_tsv(tsv_path: Path) -> dict[str, str]:
     return result
 
 
+def ensure_minimizer_index(database_path: Path) -> Optional[Path]:
+    """
+    Ensure the global nextclade minimizer_index.json exists locally.
+
+    Downloads from Nextstrain data server if missing.
+    Returns the path to the minimizer index, or None on failure.
+    """
+    minimizer_index_path = database_path / "minimizer_index.json"
+    if minimizer_index_path.is_file():
+        return minimizer_index_path
+
+    logger.warning(f"Downloading minimizer_index.json to {database_path} to speed up sort")
+    database_path.mkdir(parents=True, exist_ok=True)
+    cmd = (
+        f"curl -fsSLo {minimizer_index_path} "
+        f"https://data.clades.nextstrain.org/v3/minimizer_index.json"
+    )
+    try:
+        run_cmd(cmd, "download minimizer index")
+    except subprocess.CalledProcessError:
+        logger.error("Failed to download minimizer index")
+        return None
+
+    if not minimizer_index_path.is_file():
+        logger.error("minimizer_index.json not found after download")
+        return None
+
+    return minimizer_index_path
+
+
 def step_nextclade_sort(
-    sample: str, run_dir: Path, input_fasta: Path
+    sample: str, run_dir: Path, input_fasta: Path, database_path: Path
 ) -> Optional[dict[str, str]]:
     """
     Run nextclade sort on per-sample FASTA.
+
+    Downloads the global minimizer_index.json if absent and passes it
+    via ``-m`` to accelerate dataset assignment.
 
     Returns {seqName: dataset}, or None on failure.
     """
     sort_tsv = run_dir / "sort.tsv"
 
-    cmd = f"nextclade sort -r {sort_tsv} {input_fasta}"
+    minimizer_index = ensure_minimizer_index(database_path)
+    if minimizer_index is not None:
+        cmd = f"nextclade sort -m {minimizer_index} -r {sort_tsv} {input_fasta}"
+    else:
+        logger.warning("Falling back to nextclade sort without minimizer index")
+        cmd = f"nextclade sort -r {sort_tsv} {input_fasta}"
+
     try:
         run_cmd(cmd, f"nextclade sort for {sample}")
     except subprocess.CalledProcessError:
@@ -816,7 +855,7 @@ def process_sample(
 
     # Step 5: nextclade sort (output to run_dir)
     logger.info(f"[Step 5/7] nextclade sort for {sample}")
-    seq_to_dataset = step_nextclade_sort(sample, run_dir, renamed_fasta)
+    seq_to_dataset = step_nextclade_sort(sample, run_dir, renamed_fasta, database_path)
     if seq_to_dataset is None:
         logger.warning(f"nextclade sort failed for {sample}, skipping nextclade run + alignment.")
         qc_data["Alignment_Rate"] = 0
