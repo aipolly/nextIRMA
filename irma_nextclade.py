@@ -50,7 +50,7 @@ MODULE_SEGMENT_MAP: dict[str, dict[int, str]] = {
     "FLU_AD": {},
 }
 
-SUPPORTED_MODULES = {"FLU", "RSV", "CoV", "HMPV","HPIV"}
+SUPPORTED_MODULES = {"FLU", "RSV", "CoV", "HMPV","HPIV","CHIKV"}
 
 # ---------------------------------------------------------------------------
 # Logging
